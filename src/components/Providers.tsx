@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SessionProvider } from "next-auth/react";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -11,5 +12,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   if (!mounted) return null;
 
-  return <>{children}</>;
+  return (
+    <SessionProvider>
+      {children}
+    </SessionProvider>
+  );
 }

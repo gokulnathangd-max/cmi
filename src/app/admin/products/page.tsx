@@ -22,7 +22,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps) {
       }
     : {};
 
-  const [products, total] = await Promise.all([
+  const [rawProducts, total] = await Promise.all([
     db.product.findMany({
       where,
       include: {
@@ -39,6 +39,9 @@ export default async function AdminProductsPage({ searchParams }: PageProps) {
     }),
     db.product.count({ where }),
   ]);
+
+  // Safely serialize complex Prisma types (Decimal, Date) into plain JSON objects
+  const products = JSON.parse(JSON.stringify(rawProducts));
 
   const totalPages = Math.ceil(total / limit);
 
@@ -84,7 +87,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps) {
                 p === page ? "bg-primary text-black font-bold" : "bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10"
               }`}
             >
-              {p}
+              {" "}{p}{" "}
             </Link>
           ))}
         </div>

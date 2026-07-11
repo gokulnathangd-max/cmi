@@ -5,6 +5,13 @@ import { User, Store, Shield, Bell, Save, Key, Mail, Globe, CreditCard, Loader2 
 import { toast } from "sonner";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardAction,
+} from "@/components/ui/card";
 
 export default function AdminSettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -13,6 +20,9 @@ export default function AdminSettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Gateway state (only managing whether it is active or inactive)
+  const [isRazorpayActive, setIsRazorpayActive] = useState(true);
 
   useEffect(() => {
     if (session?.user?.image) {
@@ -34,9 +44,10 @@ export default function AdminSettingsPage() {
         
         if (!res.ok) throw new Error("Failed to save profile");
         
-        // Force session update so the header avatar changes too
         await updateSession({ image: avatarUrl });
       }
+      
+      // Optional: Handle saving your updated gateway configuration toggle state to your database here
       
       setTimeout(() => {
         setLoading(false);
@@ -77,7 +88,6 @@ export default function AdminSettingsPage() {
       console.error(error);
     } finally {
       setUploadingAvatar(false);
-      // Reset input so same file can be selected again
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -107,6 +117,7 @@ export default function AdminSettingsPage() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
                 activeTab === tab.id
@@ -250,37 +261,52 @@ export default function AdminSettingsPage() {
               </div>
             )}
 
-            {/* PAYMENTS TAB */}
+            {/* PAYMENTS TAB (REFACTERED TOGGLE VIEW) */}
             {activeTab === "payments" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="mb-6">
                   <h2 className="text-xl font-heading font-bold text-white mb-1">Payment Gateways</h2>
-                  <p className="text-sm text-gray-400">Configure Razorpay and other payment providers.</p>
+                  <p className="text-sm text-gray-400">Toggle active payment integrations for your customer storefront.</p>
                 </div>
                 
-                <div className="p-5 rounded-xl border border-white/10 bg-black/50 flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                    <CreditCard className="w-6 h-6 text-blue-500" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-bold text-white">Razorpay Integration</h3>
-                      <span className="px-2 py-1 rounded text-[10px] font-bold bg-green-500/20 text-green-400 uppercase tracking-widest">Active</span>
+                <Card className="bg-black/40 border-white/10">
+                  <CardHeader className="relative flex flex-row items-start gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0 text-blue-500">
+                      <CreditCard className="w-6 h-6" />
                     </div>
-                    <p className="text-sm text-gray-400 mb-4">Accept payments via UPI, Credit/Debit Cards, and NetBanking.</p>
                     
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest text-gray-500">Razorpay Key ID</label>
-                        <input type="text" defaultValue="rzp_test_xxxxxx" className="w-full bg-black border border-white/10 rounded-xl px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-primary transition-colors" />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-white text-base font-bold">Razorpay Integration</CardTitle>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors uppercase tracking-widest ${
+                          isRazorpayActive ? "bg-green-500/20 text-green-400" : "bg-white/10 text-gray-400"
+                        }`}>
+                          {isRazorpayActive ? "Active" : "Inactive"}
+                        </span>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest text-gray-500">Razorpay Key Secret</label>
-                        <input type="password" defaultValue="••••••••••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-primary transition-colors" />
-                      </div>
+                      <CardDescription className="text-sm text-gray-400 max-w-xl">
+                        Accept customer checkout transactions seamlessly via UPI, Credit/Debit Cards, NetBanking, and mobile wallets.
+                      </CardDescription>
                     </div>
-                  </div>
-                </div>
+
+                    {/* Action Switch Instead of Input Fields */}
+                    <CardAction className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsRazorpayActive(!isRazorpayActive)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          isRazorpayActive ? "bg-primary" : "bg-white/10"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            isRazorpayActive ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </CardAction>
+                  </CardHeader>
+                </Card>
               </div>
             )}
 
