@@ -122,6 +122,7 @@ model Product {
   isFeatured      Boolean  @default(false)
   warrantyMonths  Int      @default(12)
   weight          Decimal? // kg
+  capacity        String?  //
   datasheetUrl    String?  // Cloudinary PDF URL
   metaTitle       String?
   metaDesc        String?

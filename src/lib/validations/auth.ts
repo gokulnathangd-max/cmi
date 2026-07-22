@@ -1,10 +1,22 @@
 import { z } from "zod";
 
+// Client-side schema used for initial component state
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   pin: z.string().optional(),
 });
+
+// Dynamic server-side schema helper to require PIN when 2FA is active
+export const getLoginServerSchema = (requires2FA: boolean) => {
+  return z.object({
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    pin: requires2FA
+      ? z.string().length(6, "2FA PIN must be exactly 6 digits")
+      : z.string().optional(),
+  });
+};
 
 export const registerSchema = z
   .object({
@@ -24,12 +36,10 @@ export const registerSchema = z
   });
 
 export const dealerRegisterSchema = z.object({
-  // Personal info
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   phone: z.string().regex(/^[6-9]\d{9}$/, "Invalid Indian phone number"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  // Business info
   businessName: z.string().min(2, "Business name is required"),
   gstNumber: z
     .string()

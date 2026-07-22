@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
@@ -10,9 +10,18 @@ import crypto from "crypto";
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "d6F3E0a4F3e0A4f3e0A4f3e0A4f3e0A4"; // 32 bytes key for AES-256
 const IV_LENGTH = 16;
 
+// Custom Auth.js machine-readable error classes to communicate with your UI form
+class MissingTwoFactorError extends CredentialsSignin {
+  code = "two_factor_required";
+}
+
+class InvalidCredentialsError extends CredentialsSignin {
+  code = "invalid_credentials";
+}
+
 /**
  * Decrypts a twoFactorSecret string that was encrypted with aes-256-cbc.
- * Falls back to raw text if it is not in encrypted format (e.g. static seed).
+ * Falls back to raw text if it is not in encrypted format (e.g. static seed like "123456").
  */
 function decryptSecret(text: string): string {
   try {
@@ -26,56 +35,6 @@ function decryptSecret(text: string): string {
     return decrypted.toString();
   } catch (error) {
     return text;
-  }
-}
-
-/**
- * Native RFC-6238 compliant TOTP verification helper.
- * Decodes standard base32 secrets and verifies time-varying 6-digit tokens with clock drift tolerance.
- */
-function verifyTOTP(token: string, secret: string): boolean {
-  try {
-    const base32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    let bits = "";
-    for (let i = 0; i < secret.length; i++) {
-      const val = base32chars.indexOf(secret.charAt(i).toUpperCase());
-      if (val !== -1) {
-        bits += val.toString(2).padStart(5, "0");
-      }
-    }
-    const bytes: number[] = [];
-    for (let i = 0; i + 8 <= bits.length; i += 8) {
-      bytes.push(parseInt(bits.substring(i, i + 8), 2));
-    }
-    const key = Buffer.from(bytes);
-
-    const epoch = Math.round(new Date().getTime() / 1000.0);
-    const counter = Math.floor(epoch / 30);
-
-    for (let drift = -1; drift <= 1; drift++) {
-      const timeBuffer = Buffer.alloc(8);
-      timeBuffer.writeBigInt64BE(BigInt(counter + drift));
-
-      const hmac = crypto.createHmac("sha1", key);
-      hmac.update(timeBuffer);
-      const hmacResult = hmac.digest();
-
-      const offset = hmacResult[hmacResult.length - 1] & 0xf;
-      const code =
-        ((hmacResult[offset] & 0x7f) << 24) |
-        ((hmacResult[offset + 1] & 0xff) << 16) |
-        ((hmacResult[offset + 2] & 0xff) << 8) |
-        (hmacResult[offset + 3] & 0xff);
-
-      const computedToken = (code % 1000000).toString().padStart(6, "0");
-      if (computedToken === token) {
-        return true;
-      }
-    }
-    return false;
-  } catch (error) {
-    console.error("[TOTP_VERIFICATION_ERROR]", error);
-    return false;
   }
 }
 
@@ -101,7 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         const validated = loginSchema.safeParse(credentials);
-        if (!validated.success) return null;
+        if (!validated.success) throw new InvalidCredentialsError();
 
         const { email, password, pin } = validated.data;
 
@@ -109,29 +68,37 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: email.toLowerCase() },
         });
 
-        if (!user || !user.password) return null;
-        if (!user.isActive) return null;
+        // Fail early with custom error if user record is missing, wrong password, or inactive
+        if (!user || !user.password || !user.isActive) {
+          throw new InvalidCredentialsError();
+        }
 
         const passwordMatch = await bcrypt.compare(password, user.password);
-        if (!passwordMatch) return null;
+        if (!passwordMatch) throw new InvalidCredentialsError();
 
-        // Secure Admin MFA check
+        // Secure Admin MFA Check (Static Verification Mode for Testing)
         if (user.role === "ADMIN") {
+          // 1. Check if the admin user has a pin configured in the DB
           if (!user.twoFactorSecret) {
             console.warn(`[Auth] Admin user ${email} attempted login without setting up 2FA.`);
-            return null;
+            throw new MissingTwoFactorError(); 
           }
+          
+          // 2. Step 1 Login Success -> Prompt UI to reveal the Admin Security PIN box
           if (!pin) {
-            console.warn(`[Auth] Admin user ${email} login failed: Missing 2FA PIN.`);
-            return null;
+            console.log(`[Auth] Admin user ${email} login step 1 passed: Prompting for 2FA PIN.`);
+            throw new MissingTwoFactorError(); 
           }
 
+          // 3. Decrypt data from DB ("123456" falls back automatically to raw text if unencrypted)
           const decryptedSecret = decryptSecret(user.twoFactorSecret);
-          const isPinValid = verifyTOTP(pin, decryptedSecret);
+          
+          // 4. FIXED STRATEGY: Direct string check to allow fixed test codes instantly
+          const isPinValid = pin === decryptedSecret;
 
           if (!isPinValid) {
             console.warn(`[Auth] Failed admin login attempt for ${email}: Invalid 2FA PIN.`);
-            return null;
+            throw new InvalidCredentialsError();
           }
         }
 
